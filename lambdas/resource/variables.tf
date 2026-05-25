@@ -15,8 +15,8 @@ variable "resource_type" {
   type = string
 
   validation {
-    condition     = contains(["s3_bucket", "iam_role"], var.resource_type)
-    error_message = "resource_type must be s3_bucket or iam_role."
+    condition     = contains(["s3_bucket", "iam_role", "sqs_queue", "dynamodb_table"], var.resource_type)
+    error_message = "resource_type must be s3_bucket, iam_role, sqs_queue, or dynamodb_table."
   }
 }
 
