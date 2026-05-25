@@ -1,0 +1,17 @@
+{
+  "name": "infrareaper",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-destructing ephemeral cloud environment provisioner.",
+  "scripts": {
+    "build": "cd frontend && npm.cmd run build",
+    "dev": "cd frontend && npm.cmd run dev",
+    "lint": "cd frontend && npm.cmd run lint",
+    "lambda:check": "node lambdas/src/request-schema.mjs",
+    "preview": "node scripts/serve-dist.mjs"
+  },
+  "workspaces": [
+    "frontend",
+    "lambdas"
+  ]
+}

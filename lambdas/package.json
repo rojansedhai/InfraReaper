@@ -1,0 +1,10 @@
+{
+  "name": "@infrareaper/lambdas",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-scheduler": "^3.758.0",
+    "infrareaper": "file:.."
+  }
+}

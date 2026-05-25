@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.vite/
+.terraform/
+terraform.tfstate*
+*.tfvars
+*.tfvars.json
+*.zip
+.env
+.env.*
+!.env.example
+coverage/
+logs/
+*.log
+*.tsbuildinfo
