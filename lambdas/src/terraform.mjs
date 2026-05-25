@@ -85,8 +85,9 @@ function filterOutputs(outputs) {
 }
 
 export async function runTerraformApply(config, request) {
-  const workDir = await prepareWorkDir(config, request.environmentId);
+  const workDir = join(tmpdir(), `infrareaper-${request.environmentId}`);
   try {
+    await prepareWorkDir(config, request.environmentId);
     const varFile = await writeVariables(workDir, config, request);
 
     await run(config.terraformBin, ["init", "-input=false", ...backendArgs(config, request.environmentId)], {
@@ -104,8 +105,9 @@ export async function runTerraformApply(config, request) {
 }
 
 export async function runTerraformDestroy(config, request) {
-  const workDir = await prepareWorkDir(config, request.environmentId);
+  const workDir = join(tmpdir(), `infrareaper-${request.environmentId}`);
   try {
+    await prepareWorkDir(config, request.environmentId);
     const varFile = await writeVariables(workDir, config, request);
 
     await run(config.terraformBin, ["init", "-input=false", ...backendArgs(config, request.environmentId)], {
