@@ -86,29 +86,37 @@ function filterOutputs(outputs) {
 
 export async function runTerraformApply(config, request) {
   const workDir = await prepareWorkDir(config, request.environmentId);
-  const varFile = await writeVariables(workDir, config, request);
+  try {
+    const varFile = await writeVariables(workDir, config, request);
 
-  await run(config.terraformBin, ["init", "-input=false", ...backendArgs(config, request.environmentId)], {
-    cwd: workDir
-  });
-  await run(config.terraformBin, ["apply", "-auto-approve", "-input=false", `-var-file=${varFile}`], {
-    cwd: workDir
-  });
+    await run(config.terraformBin, ["init", "-input=false", ...backendArgs(config, request.environmentId)], {
+      cwd: workDir
+    });
+    await run(config.terraformBin, ["apply", "-auto-approve", "-input=false", `-var-file=${varFile}`], {
+      cwd: workDir
+    });
 
-  const output = await run(config.terraformBin, ["output", "-json"], { cwd: workDir });
-  return filterOutputs(JSON.parse(output.stdout || "{}"));
+    const output = await run(config.terraformBin, ["output", "-json"], { cwd: workDir });
+    return filterOutputs(JSON.parse(output.stdout || "{}"));
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(console.error);
+  }
 }
 
 export async function runTerraformDestroy(config, request) {
   const workDir = await prepareWorkDir(config, request.environmentId);
-  const varFile = await writeVariables(workDir, config, request);
+  try {
+    const varFile = await writeVariables(workDir, config, request);
 
-  await run(config.terraformBin, ["init", "-input=false", ...backendArgs(config, request.environmentId)], {
-    cwd: workDir
-  });
-  await run(config.terraformBin, ["destroy", "-auto-approve", "-input=false", `-var-file=${varFile}`], {
-    cwd: workDir
-  });
+    await run(config.terraformBin, ["init", "-input=false", ...backendArgs(config, request.environmentId)], {
+      cwd: workDir
+    });
+    await run(config.terraformBin, ["destroy", "-auto-approve", "-input=false", `-var-file=${varFile}`], {
+      cwd: workDir
+    });
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(console.error);
+  }
 }
 
 async function prepareWorkDir(config, environmentId) {
