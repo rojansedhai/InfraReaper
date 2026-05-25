@@ -23,6 +23,70 @@ infra/                  Permanent AWS control-plane Terraform
 scripts/                Packaging helpers
 ```
 
+## Architecture Diagram
+
+```mermaid
+flowchart TD
+    %% Define Styles
+    classDef frontend fill:#61DAFB,stroke:#333,stroke-width:2px,color:#000
+    classDef gateway fill:#FF9900,stroke:#333,stroke-width:2px,color:#000
+    classDef lambda fill:#FF9900,stroke:#333,stroke-width:2px,color:#000
+    classDef database fill:#3B48CC,stroke:#333,stroke-width:2px,color:#FFF
+    classDef storage fill:#3B48CC,stroke:#333,stroke-width:2px,color:#FFF
+    classDef queue fill:#FF4F8B,stroke:#333,stroke-width:2px,color:#FFF
+    classDef schedule fill:#FF4F8B,stroke:#333,stroke-width:2px,color:#FFF
+    classDef resource fill:#00A4A6,stroke:#333,stroke-width:2px,color:#FFF
+
+    %% Nodes
+    User(("🧑‍💻 User"))
+    UI["⚛️ React Dashboard\n(Local/Hosted)"]:::frontend
+    
+    subgraph AWS Cloud Control Plane
+        API["🚪 API Gateway"]:::gateway
+        
+        subgraph Compute
+            ProvLambda["⚡ Provisioner Lambda\n(+ Terraform Layer)"]:::lambda
+            DestLambda["⚡ Destroyer Lambda\n(+ Terraform Layer)"]:::lambda
+        end
+        
+        subgraph State & Metrics
+            S3State[("🪣 S3 Bucket\n(Terraform State)")]:::storage
+            DDBLock[("🔒 DynamoDB\n(State Locks)")]:::database
+            DDBMetrics[("📈 DynamoDB\n(FinOps Metrics)")]:::database
+        end
+        
+        EB["⏱️ EventBridge Scheduler"]:::schedule
+        DLQ["📨 SQS DLQ\n(Failed Destroys)"]:::queue
+    end
+
+    subgraph Ephemeral Test Environment
+        TempRes["☁️ Temporary AWS Resources\n(S3, SQS, IAM, DynamoDB)"]:::resource
+    end
+
+    %% Flow: Provisioning
+    User -- "1. Requests Resource\n(TTL: 1 Hour)" --> UI
+    UI -- "2. HTTP POST" --> API
+    API -- "3. Invokes" --> ProvLambda
+    ProvLambda -- "4. terraform apply" --> TempRes
+    
+    ProvLambda -. "Reads/Writes" .-> S3State
+    ProvLambda -. "Locks State" .-> DDBLock
+    ProvLambda -. "Updates stats" .-> DDBMetrics
+    
+    ProvLambda -- "5. Schedules Teardown" --> EB
+
+    %% Flow: Destroying
+    EB -- "6. Triggers at TTL expiry" --> DestLambda
+    DestLambda -- "7. terraform destroy" --> TempRes
+    
+    DestLambda -. "Reads/Writes" .-> S3State
+    DestLambda -. "Locks State" .-> DDBLock
+    
+    %% Flow: Failure
+    DestLambda -- "8. On Failure" --> DLQ
+
+```
+
 ## Security Model
 
 InfraReaper is designed to avoid the common trap of giving a Lambda unrestricted Terraform permissions.
