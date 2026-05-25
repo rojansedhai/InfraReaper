@@ -134,6 +134,7 @@ resource "aws_lambda_function" "destroyer" {
     variables = merge(
       {
         LOCK_TABLE     = aws_dynamodb_table.locks.name
+        METRICS_TABLE  = aws_dynamodb_table.metrics.name
         RESOURCE_DIR   = "/var/task/resource"
         SCHEDULE_GROUP = aws_scheduler_schedule_group.destroy.name
         STATE_BUCKET   = aws_s3_bucket.state.bucket
