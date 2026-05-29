@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1053.0",
     "@aws-sdk/client-scheduler": "^3.758.0",
     "infrareaper": "file:.."
   }

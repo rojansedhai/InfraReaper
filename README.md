@@ -169,11 +169,20 @@ Successful responses include the environment ID, expiry timestamp, schedule name
 - Prefer JWT authorization in real environments; unauthenticated mode is for local demos only.
 - Review and narrow `infra/lambda-policies.tf` before allowing additional Terraform resource types.
 
+## ⚡ Performance & Cold Start Resilience
+
+To work reliably within AWS API Gateway's strict **30-second integration timeout**, InfraReaper implements a highly resilient, two-tiered performance architecture:
+
+1. **Backend Terraform Plugin Cache:**
+   The provisioner and destroyer Lambdas share a warm-state plugin cache directory in `/tmp/terraform-plugin-cache` (using `TF_PLUGIN_CACHE_DIR`). On a cold start, the massive ~685MB AWS Terraform provider is downloaded once. On all subsequent "warm" invocations, `terraform init` loads the provider locally in **less than 1.5 seconds**, dropping total provisioning times to a swift **12–17 seconds** (comfortably under the timeout limit).
+2. **Frontend Background Polling Fallback:**
+   For cold starts where the initial provider download exceeds 30 seconds (resulting in a `503 Service Unavailable` or `504 Gateway Timeout` from API Gateway), the React dashboard handles it gracefully. Instead of displaying a critical failure, the UI transitions into an amber **"Provisioning in Background"** status and polls the zero-cost `/metrics` endpoint. Once the background Lambda completes successfully and increments the DynamoDB global counter, the frontend automatically detects it, updates the dashboard, and displays a success notification.
+
 ## ⚠️ Warnings & Limitations
 
 If you are deploying this for real-world usage or evaluating it, please be aware of the following:
 
-1. **State File Locks**: If a user manually modifies a temporary resource (e.g., changes an S3 bucket policy) or if the Terraform state file is tampered with, the `terraform destroy` command may fail. Failed destroys are routed to the SQS DLQ, but **they require manual intervention** to clean up.
-2. **Lambda Timeout Constraints**: AWS Lambda has a hard timeout of 15 minutes. This architecture is designed for fast-provisioning resources (S3, DynamoDB, IAM, SQS). **Do not add long-running resources** (like RDS databases, EKS clusters, or CloudFront distributions) to the Terraform module, as they will exceed the Lambda timeout and fail to provision/destroy.
-3. **Unauthenticated Access**: By default, the API Gateway is deployed without an authorizer for ease of testing. **Do not deploy this to a production AWS account without enabling the JWT Authorizer** (`jwt_issuer` and `jwt_audience` variables), otherwise anyone on the internet can spin up resources in your account.
-4. **Cost of the Control Plane**: While the temporary resources are torn down automatically, the Control Plane (API Gateway, S3 backend, DynamoDB lock/metrics tables, SQS DLQ, Lambdas) remains permanently deployed. It is highly serverless and largely fits within the AWS Free Tier, but it is not completely free if heavily utilized.
+1. **State File Locks:** If a user manually modifies a temporary resource (e.g., changes an S3 bucket policy) or if the Terraform state file is tampered with, the `terraform destroy` command may fail. Failed destroys are routed to the SQS DLQ and **require manual intervention** to clean up.
+2. **Lambda Timeout Constraints:** AWS Lambda has a hard timeout of 15 minutes. This architecture is designed for fast-provisioning resources (S3, DynamoDB, IAM, SQS). **Do not add long-running resources** (like RDS databases, EKS clusters, or CloudFront distributions) to the Terraform module, as they will exceed the Lambda timeout and fail to provision/destroy.
+3. **Unauthenticated Access:** By default, the API Gateway is deployed without an authorizer for ease of testing. **Do not deploy this to a production AWS account without enabling the JWT Authorizer** (`jwt_issuer` and `jwt_audience` variables), otherwise anyone on the internet can spin up resources in your account.
+4. **Cost of the Control Plane:** While the temporary resources are torn down automatically, the Control Plane (API Gateway, S3 backend, DynamoDB lock/metrics tables, SQS DLQ, Lambdas) remains permanently deployed. It is highly serverless and largely fits within the AWS Free Tier, but it is not completely free if heavily utilized.

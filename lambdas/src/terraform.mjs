@@ -12,7 +12,8 @@ function run(command, args, options) {
       env: {
         ...process.env,
         TF_IN_AUTOMATION: "true",
-        TF_INPUT: "0"
+        TF_INPUT: "0",
+        TF_PLUGIN_CACHE_DIR: join(tmpdir(), "terraform-plugin-cache")
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -126,6 +127,7 @@ async function prepareWorkDir(config, environmentId) {
   await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { recursive: true });
   await cp(config.resourceDir, workDir, { recursive: true });
+  await mkdir(join(tmpdir(), "terraform-plugin-cache"), { recursive: true });
   return workDir;
 }
 
