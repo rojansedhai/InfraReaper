@@ -145,6 +145,28 @@ Set `VITE_API_BASE_URL` in `frontend/.env` to the API Gateway URL from the Terra
 
 4. Point the frontend at the `api_endpoint` output and deploy it to your preferred static host.
 
+## Teardown & Control Plane Destruction
+
+To completely destroy the permanently deployed control plane (the API Gateway, DynamoDB metrics/lock tables, state bucket, SQS DLQ, Lambdas, and associated IAM roles) and avoid any remaining charges:
+
+1. **Delete all ephemeral resources first:**
+   Ensure all active temporary environments have either self-destructed via their schedules or have been destroyed. (InfraReaper manages its state files dynamically in S3, and destroying the control plane before these resources are deleted can leave them orphaned).
+
+2. **Clean and empty the S3 State Bucket:**
+   AWS S3 strictly rejects deletion of buckets that contain objects. Retrieve your state bucket name from the Terraform output and empty it via the AWS Console or using the AWS CLI:
+   ```powershell
+   aws s3 rm s3://YOUR_STATE_BUCKET_NAME --recursive
+   ```
+   *(Note: If bucket versioning is enabled, make sure to delete all object versions and delete markers.)*
+
+3. **Run Terraform Destroy:**
+   Execute the teardown command:
+   ```powershell
+   terraform -chdir=infra destroy `
+     -var="lambda_zip_path=../dist/infrareaper-lambda.zip" `
+     -var="terraform_layer_zip_path=../dist/terraform-layer.zip"
+   ```
+
 ## API
 
 `POST /environments`
