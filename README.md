@@ -153,11 +153,22 @@ To completely destroy the permanently deployed control plane (the API Gateway, D
    Ensure all active temporary environments have either self-destructed via their schedules or have been destroyed. (InfraReaper manages its state files dynamically in S3, and destroying the control plane before these resources are deleted can leave them orphaned).
 
 2. **Clean and empty the S3 State Bucket:**
-   AWS S3 strictly rejects deletion of buckets that contain objects. Retrieve your state bucket name from the Terraform output and empty it via the AWS Console or using the AWS CLI:
-   ```powershell
-   aws s3 rm s3://YOUR_STATE_BUCKET_NAME --recursive
-   ```
-   *(Note: If bucket versioning is enabled, make sure to delete all object versions and delete markers.)*
+   AWS S3 strictly rejects the deletion of buckets that contain object versions or delete markers.
+   
+   * **Option A: AWS Console (Primary & Recommended)**
+     1. Open your AWS Console and navigate to the **S3** service.
+     2. Locate and select the `ir-state-...` state bucket.
+     3. Click **Empty**, type `permanently delete` in the text box, and click **Empty** to confirm. (The S3 console automatically clears all historical object versions and delete markers for you).
+   
+   * **Option B: AWS CLI (Advanced Version-Aware)**
+     Because versioning is enabled on this bucket, running a standard `aws s3 rm` will only create delete markers and keep historical versions intact. To purge all object versions and delete markers via CLI, run:
+     ```powershell
+     # 1. Purge all object versions
+     aws s3api delete-objects --bucket YOUR_STATE_BUCKET_NAME --delete "$(aws s3api list-object-versions --bucket YOUR_STATE_BUCKET_NAME --query='{Objects: Versions[].{Key:Key,VersionId:VersionId}}' --output json)"
+
+     # 2. Purge all delete markers
+     aws s3api delete-objects --bucket YOUR_STATE_BUCKET_NAME --delete "$(aws s3api list-object-versions --bucket YOUR_STATE_BUCKET_NAME --query='{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' --output json)"
+     ```
 
 3. **Run Terraform Destroy:**
    Execute the teardown command:
