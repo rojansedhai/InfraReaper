@@ -35,6 +35,8 @@ export function App() {
   const [result, setResult] = useState<ProvisionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<{environmentsCreated: number, hoursSaved: number} | null>(null);
+  const [isProvisioningInBackground, setIsProvisioningInBackground] = useState(false);
+  const [backgroundSuccess, setBackgroundSuccess] = useState(false);
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_BASE_URL}/metrics`)
@@ -57,11 +59,50 @@ export function App() {
     });
   }, [form.ttlHours]);
 
+  function startBackgroundPolling(initialCount: number) {
+    setIsProvisioningInBackground(true);
+    setBackgroundSuccess(false);
+    setError(null);
+    setResult(null);
+
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/metrics`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data.environmentsCreated === 'number') {
+          setMetrics(data);
+          if (data.environmentsCreated > initialCount) {
+            clearInterval(intervalId);
+            setIsProvisioningInBackground(false);
+            setBackgroundSuccess(true);
+            setForm((current) => ({ ...initialState, requestedBy: current.requestedBy }));
+          }
+        }
+      } catch (err) {
+        console.error("Error polling metrics", err);
+      }
+    }, 4000);
+
+    setTimeout(() => {
+      clearInterval(intervalId);
+      setIsProvisioningInBackground((current) => {
+        if (current) {
+          setError("Background provisioning timed out. Please check your AWS Console.");
+        }
+        return false;
+      });
+    }, 4 * 60 * 1000);
+  }
+
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
     setResult(null);
+    setBackgroundSuccess(false);
+
+    const initialCount = metrics?.environmentsCreated ?? 0;
 
     try {
       if (!API_BASE_URL) {
@@ -79,13 +120,22 @@ export function App() {
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
+        if (response.status === 503 || response.status === 504) {
+          startBackgroundPolling(initialCount);
+          return;
+        }
         throw new Error(payload?.message ?? "Provisioning request failed.");
       }
 
       setResult(payload as ProvisionResponse);
       setForm((current) => ({ ...initialState, requestedBy: current.requestedBy }));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+      const msg = caught instanceof Error ? caught.message : "";
+      if (msg.includes("Service Unavailable") || msg.includes("Timeout") || msg.includes("Failed to fetch")) {
+        startBackgroundPolling(initialCount);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Something went wrong.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -246,6 +296,31 @@ export function App() {
 
           {error ? <div className="notice error">{error}</div> : null}
 
+          {isProvisioningInBackground && (
+            <div className="notice warning" style={{ borderColor: '#e3b341', background: 'rgba(227, 179, 65, 0.05)', color: '#f1c40f' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', marginBottom: '8px' }}>
+                <Loader2 className="spin" size={18} />
+                <span>Cold Start Detected (API Timeout)</span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#ccc' }}>
+                API Gateway timed out (30s limit), but your resource is still being provisioned in AWS. 
+                Monitoring metrics for background completion... (this may take up to 90 seconds)
+              </p>
+            </div>
+          )}
+
+          {backgroundSuccess && (
+            <div className="notice success" style={{ borderColor: '#2ea44f', background: 'rgba(46, 164, 79, 0.05)', color: '#2ea44f' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', marginBottom: '8px' }}>
+                <ShieldCheck size={18} />
+                <span>Background Provisioning Successful!</span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#ccc' }}>
+                Your ephemeral environment has been successfully created in the background. The metrics count was updated.
+              </p>
+            </div>
+          )}
+
           {result ? (
             <div className="notice success">
               <span>Environment ready</span>
@@ -265,10 +340,12 @@ export function App() {
               </dl>
             </div>
           ) : (
-            <div className="emptyState">
-              <Clock size={30} aria-hidden="true" />
-              <span>No active request in this browser session.</span>
-            </div>
+            !isProvisioningInBackground && !backgroundSuccess && (
+              <div className="emptyState">
+                <Clock size={30} aria-hidden="true" />
+                <span>No active request in this browser session.</span>
+              </div>
+            )
           )}
         </aside>
       </section>
